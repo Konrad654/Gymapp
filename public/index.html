@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#121714">
+  <meta name="apple-mobile-web-app-title" content="Gymlogg">
+  <link rel="apple-touch-icon" href="./icon-192.png">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="stylesheet" href="./style.css">
+  <title>Gymlogg</title>
+  <script defer src="./seed.js"></script>
+  <script defer src="./app.js"></script>
+</head>
+<body>
+  <main>
+    <header><p class="eyebrow">GYM · KONDITION</p><h1>Gymlogg</h1><p>Se vad du körde senast och logga nästa set.</p></header>
+    <p id="storage-error" class="error" role="alert" hidden></p>
+    <p id="status" role="status" class="status"></p>
+    <button type="button" class="primary" id="new-log">+ Ny logg</button>
+    <section class="panel" id="log-panel" hidden aria-labelledby="log-title">
+      <h2 id="log-title">Ny logg</h2>
+      <label for="activity">Övning eller aktivitet</label>
+      <select id="activity"></select>
+      <button type="button" class="secondary" id="new-activity" aria-expanded="false" aria-controls="activity-form">+ Lägg till övning</button>
+      <form id="activity-form" class="subpanel" hidden>
+        <label for="activity-name">Namn på övningen</label>
+        <input id="activity-name" maxlength="80" required>
+        <label for="activity-group">Grupp</label>
+        <select id="activity-group"><option>Egna övningar</option><option>Upper</option><option>Lower</option></select>
+        <button class="secondary">Lägg till</button>
+        <p id="activity-error" role="alert" class="error" hidden></p>
+      </form>
+      <form id="log-form" hidden>
+        <div class="previous"><strong>Förra gången</strong><p id="previous"></p></div>
+        <div id="gym-fields" class="grid">
+          <label for="weight">Vikt (kg)</label><label for="reps">Reps</label>
+          <div class="counter"><button type="button" data-step="-2.5" data-for="weight" aria-label="Minska vikten">−</button><input id="weight" inputmode="decimal" aria-label="Vikt i kilogram"><button type="button" data-step="2.5" data-for="weight" aria-label="Öka vikten">+</button></div>
+          <div class="counter"><button type="button" data-step="-1" data-for="reps" aria-label="Minska antal reps">−</button><input id="reps" inputmode="numeric" aria-label="Antal reps"><button type="button" data-step="1" data-for="reps" aria-label="Öka antal reps">+</button></div>
+        </div>
+        <div id="cardio-fields" hidden>
+          <label for="distance">Distans (km)</label><input id="distance" inputmode="decimal" placeholder="5,2">
+          <div class="grid">
+            <label for="minutes">Minuter</label><label for="seconds">Sekunder</label>
+            <input id="minutes" inputmode="numeric" placeholder="0"><input id="seconds" inputmode="numeric" placeholder="0">
+          </div>
+        </div>
+        <label for="note">Anteckning <span>(valfritt)</span></label>
+        <textarea id="note" rows="2" maxlength="500" placeholder="T.ex. tungt på sista repet"></textarea>
+        <p id="log-error" role="alert" class="error" hidden></p>
+        <div class="actions"><button class="primary">Spara</button><button type="button" class="secondary" id="cancel">Stäng</button></div>
+      </form>
+    </section>
+    <section aria-labelledby="history-title">
+      <h2 id="history-title">Historik</h2>
+      <div id="history"></div>
+    </section>
+    <details class="backup panel">
+      <summary>Säkerhetskopia</summary>
+      <p>Spara en kopia i Filer. Import ersätter historiken och övningarna på den här enheten.</p>
+      <div class="actions"><button type="button" class="secondary" id="export">Exportera</button><button type="button" class="secondary" id="import">Importera</button></div>
+      <input id="backup-file" type="file" accept=".json,application/json" hidden>
+    </details>
+  </main>
+</body>
+</html>
