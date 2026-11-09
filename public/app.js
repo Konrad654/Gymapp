@@ -3,6 +3,7 @@ const $ = (id) => document.getElementById(id);
 const format = new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 3 });
 const groups = ["Upper", "Lower", "Kondition", "Egna övningar"];
 let data = initialData();
+let editingActivity = null;
 
 try {
   const saved = localStorage.getItem(STORAGE_KEY);
@@ -101,11 +102,12 @@ function saveHistoryChange(entry, replacement, item) {
     $("storage-error").scrollIntoView({ block: "nearest" });
     return false;
   }
+  if (editingActivity === item.id && !entriesFor(item.id).length) editingActivity = null;
   if ($("activity").value === item.id) showPrevious(item);
   renderHistory();
   const details = Array.from($("history").querySelectorAll("details"))
     .find((element) => element.dataset.activity === item.id);
-  details?.querySelector("summary").focus();
+  (details?.querySelector(".edit-activity") ?? details?.querySelector("summary"))?.focus();
   $("status").textContent = `${replacement ? "Resultatet ändrades" : "Resultatet togs bort"} · ${item.name}`;
   return true;
 }
@@ -206,29 +208,59 @@ function renderHistory() {
       const latest = document.createElement("small");
       latest.textContent = entries.length ? `Senast · ${describe(entries[0], item.kind) || entries[0].note}` : "Ingen logg ännu";
       summary.append(latest);
-      const list = document.createElement("ul");
-      list.className = "entries";
-      for (const entry of entries) {
-        const line = document.createElement("li");
-        const date = entry.date ? new Date(entry.date).toLocaleDateString("sv-SE") : "";
-        line.textContent = [[date, describe(entry, item.kind)].filter(Boolean).join(" · "), entry.note].filter(Boolean).join("\n");
-        const actions = document.createElement("div");
-        actions.className = "actions";
-        const edit = historyButton("Redigera");
-        const remove = historyButton("Ta bort");
-        edit.disabled = remove.disabled = $("new-log").disabled;
-        edit.addEventListener("click", () => editHistoryEntry(line, actions, edit, entry, item));
-        remove.addEventListener("click", () => {
-          if (window.confirm(`Ta bort det här resultatet för ${item.name}?`)) {
-            saveHistoryChange(entry, null, item);
-          }
-        });
-        actions.append(edit, remove);
-        line.append(actions);
-        list.append(line);
-      }
       details.append(summary);
-      if (entries.length) details.append(list);
+      if (entries.length) {
+        const editing = editingActivity === item.id;
+        const toolbar = document.createElement("div");
+        toolbar.className = "entries";
+        const toggle = historyButton(editing ? "Klar" : "Redigera");
+        toggle.classList.add("edit-activity");
+        toggle.disabled = $("new-log").disabled;
+        toggle.setAttribute("aria-pressed", String(editing));
+        toggle.addEventListener("click", () => {
+          editingActivity = editing ? null : item.id;
+          renderHistory();
+          const current = Array.from(history.querySelectorAll("details"))
+            .find((element) => element.dataset.activity === item.id);
+          current?.querySelector(".edit-activity").focus();
+        });
+        toolbar.append(toggle);
+        if (editing) {
+          const instruction = document.createElement("p");
+          instruction.textContent = "Tryck på ett resultat för att ändra det.";
+          toolbar.append(instruction);
+        }
+        details.append(toolbar);
+
+        const list = document.createElement("ul");
+        list.className = "entries";
+        for (const entry of entries) {
+          const line = document.createElement("li");
+          const date = entry.date ? new Date(entry.date).toLocaleDateString("sv-SE") : "";
+          const result = [[date, describe(entry, item.kind)].filter(Boolean).join(" · "), entry.note].filter(Boolean).join("\n")
+            || "Resultat utan uppgifter";
+          if (editing) {
+            const actions = document.createElement("div");
+            actions.className = "actions";
+            const edit = historyButton(result);
+            const remove = historyButton("Ta bort");
+            edit.setAttribute("aria-label", `Ändra ${result}`);
+            remove.setAttribute("aria-label", `Ta bort ${result}`);
+            edit.addEventListener("click", () => editHistoryEntry(line, actions, edit, entry, item));
+            remove.addEventListener("click", () => {
+              if (window.confirm(`Ta bort det här resultatet för ${item.name}?`)) {
+                saveHistoryChange(entry, null, item);
+              }
+            });
+            actions.append(edit, remove);
+            line.append(actions);
+          } else {
+            line.textContent = result;
+          }
+          list.append(line);
+        }
+        details.append(list);
+      }
       history.append(details);
     }
   }
@@ -371,6 +403,7 @@ $("backup-file").addEventListener("change", async (event) => {
   }
   if (!window.confirm("Ersätta övningar och historik med innehållet i säkerhetskopian?")) return;
   if (!commit(imported, "storage-error")) return;
+  editingActivity = null;
   $("new-log").disabled = false;
   populateSelect();
   showActivity();
