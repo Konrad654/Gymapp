@@ -83,6 +83,107 @@ function populateSelect(selected = "") {
   select.value = selected;
 }
 
+function historyButton(label) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "secondary";
+  button.textContent = label;
+  return button;
+}
+
+function saveHistoryChange(entry, replacement, item) {
+  const index = data.entries.indexOf(entry);
+  if (index === -1 || $("new-log").disabled) return false;
+  const entries = [...data.entries];
+  if (replacement) entries.splice(index, 1, replacement);
+  else entries.splice(index, 1);
+  if (!commit({ ...data, entries }, "storage-error")) {
+    $("storage-error").scrollIntoView({ block: "nearest" });
+    return false;
+  }
+  if ($("activity").value === item.id) showPrevious(item);
+  renderHistory();
+  const details = Array.from($("history").querySelectorAll("details"))
+    .find((element) => element.dataset.activity === item.id);
+  details?.querySelector("summary").focus();
+  $("status").textContent = `${replacement ? "Resultatet ändrades" : "Resultatet togs bort"} · ${item.name}`;
+  return true;
+}
+
+function editHistoryEntry(line, actions, edit, entry, item) {
+  const form = document.createElement("form");
+  form.className = "subpanel";
+  form.setAttribute("aria-label", `Redigera resultat för ${item.name}`);
+  function field(label, value, inputMode = "text", tag = "input") {
+    const wrapper = document.createElement("label");
+    wrapper.textContent = label;
+    const input = document.createElement(tag);
+    input.inputMode = inputMode;
+    input.value = String(value ?? "");
+    wrapper.append(input);
+    form.append(wrapper);
+    return input;
+  }
+
+  const gym = item.kind === "gym";
+  const weight = gym ? field("Vikt (kg, Max eller Max + 5 kg)", entry.weight) : null;
+  const reps = gym ? field("Reps", entry.reps, "numeric") : null;
+  const distance = gym ? null : field("Distans (km)", entry.distance, "decimal");
+  const minutes = gym ? null : field("Minuter", Math.floor(entry.duration / 60), "numeric");
+  const seconds = gym ? null : field("Sekunder", entry.duration % 60, "numeric");
+  const note = field("Anteckning", entry.note, "text", "textarea");
+  const error = document.createElement("p");
+  error.className = "error";
+  error.setAttribute("role", "alert");
+  error.hidden = true;
+
+  const controls = document.createElement("div");
+  controls.className = "actions";
+  const save = historyButton("Spara ändringar");
+  save.type = "submit";
+  save.className = "primary";
+  const cancel = historyButton("Avbryt");
+  controls.append(save, cancel);
+  form.append(error, controls);
+  actions.hidden = true;
+  line.append(form);
+  (weight ?? distance).focus();
+
+  cancel.addEventListener("click", () => {
+    form.remove();
+    actions.hidden = false;
+    edit.focus();
+  });
+
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const updated = { ...entry, note: note.value };
+    if (gym) {
+      const rawWeight = weight.value.trim();
+      updated.weight = ["Max", "Max + 5 kg"].includes(rawWeight)
+        ? rawWeight
+        : rawWeight === String(entry.weight) ? entry.weight : parseNumber(rawWeight, null);
+      updated.reps = parseNumber(reps.value, null);
+    } else {
+      const wholeMinutes = parseNumber(minutes.value, 0);
+      const remainingSeconds = parseNumber(seconds.value, 0);
+      updated.distance = distance.value === String(entry.distance) ? entry.distance : parseNumber(distance.value);
+      updated.duration = Number.isSafeInteger(wholeMinutes) && Number.isInteger(remainingSeconds) && remainingSeconds <= 59
+        ? wholeMinutes * 60 + remainingSeconds
+        : NaN;
+    }
+    if (!validBackup({ ...data, entries: [updated] })) {
+      error.textContent = gym
+        ? "Ange en vikt på minst 0 kg, Max eller Max + 5 kg och ett helt antal reps över 0. Fälten får också lämnas tomma."
+        : "Ange en distans över 0 km och en tid över 0 sekunder. Sekundfältet ska vara 0–59.";
+      error.hidden = false;
+      return;
+    }
+    error.hidden = true;
+    saveHistoryChange(entry, updated, item);
+  });
+}
+
 function renderHistory() {
   const history = $("history");
   const expanded = new Set(Array.from(history.querySelectorAll("details[open]"), (item) => item.dataset.activity));
@@ -111,6 +212,19 @@ function renderHistory() {
         const line = document.createElement("li");
         const date = entry.date ? new Date(entry.date).toLocaleDateString("sv-SE") : "";
         line.textContent = [[date, describe(entry, item.kind)].filter(Boolean).join(" · "), entry.note].filter(Boolean).join("\n");
+        const actions = document.createElement("div");
+        actions.className = "actions";
+        const edit = historyButton("Redigera");
+        const remove = historyButton("Ta bort");
+        edit.disabled = remove.disabled = $("new-log").disabled;
+        edit.addEventListener("click", () => editHistoryEntry(line, actions, edit, entry, item));
+        remove.addEventListener("click", () => {
+          if (window.confirm(`Ta bort det här resultatet för ${item.name}?`)) {
+            saveHistoryChange(entry, null, item);
+          }
+        });
+        actions.append(edit, remove);
+        line.append(actions);
         list.append(line);
       }
       details.append(summary);
@@ -128,18 +242,27 @@ function showActivity() {
   if (!item) return;
   $("gym-fields").hidden = item.kind !== "gym";
   $("cardio-fields").hidden = item.kind !== "cardio";
-  const latest = entriesFor(item.id)[0];
-  $("previous").textContent = latest
-    ? [describe(latest, item.kind), latest.note].filter(Boolean).join("\n")
-    : "Ingen tidigare logg.";
+  const latest = showPrevious(item);
   if (item.kind === "gym") {
     $("weight").value = typeof latest?.weight === "number" ? format.format(latest.weight).replace(/\s/g, "") : "";
     $("reps").value = latest?.reps ?? "";
   }
 }
 
-function numberFrom(id, defaultValue = NaN) {
-  const raw = $(id).value.trim();
+function showPrevious(item) {
+  const latest = entriesFor(item.id)[0];
+  $("previous").textContent = latest
+    ? [describe(latest, item.kind), latest.note].filter(Boolean).join("\n")
+    : "Ingen tidigare logg.";
+  return latest;
+}
+
+function numberFrom(id, defaultValue) {
+  return parseNumber($(id).value, defaultValue);
+}
+
+function parseNumber(value, defaultValue = NaN) {
+  const raw = value.trim();
   if (!raw) return defaultValue;
   return /^\d+(?:[.,]\d+)?$/.test(raw) ? Number(raw.replace(",", ".")) : NaN;
 }
